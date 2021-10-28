@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -62,10 +63,31 @@ func serve_dns(w dns.ResponseWriter, r *dns.Msg) {
 
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		msg.Answer = append(msg.Answer, &dns.A{
-			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
-			A:   w.RemoteAddr().(*net.UDPAddr).IP,
-		})
+		// sub.domains.192.168.1.1.xip.sub.domain.tld returns 192.168.1.1
+		parts := strings.Split(domain, ".")
+		xindex := -1
+		for i := 0; i < len(parts); i++ {
+			if parts[i] == "nip" {
+				xindex = i
+			}
+		}
+		if xindex-4 >= 0 {
+			ip0, er0 := strconv.ParseInt(parts[xindex-1], 10, 16)
+			ip1, er1 := strconv.ParseInt(parts[xindex-2], 10, 16)
+			ip2, er2 := strconv.ParseInt(parts[xindex-3], 10, 16)
+			ip3, er3 := strconv.ParseInt(parts[xindex-4], 10, 16)
+			if er0 != nil || er1 != nil || er2 != nil || er3 != nil {
+				msg.SetRcode(r, dns.RcodeServerFailure)
+			}
+			ip := net.IPv4(byte(ip3), byte(ip2), byte(ip1), byte(ip0))
+
+			msg.Answer = append(msg.Answer, &dns.A{
+				Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+				A:   ip,
+			})
+		} else {
+			msg.SetRcode(r, dns.RcodeServerFailure)
+		}
 
 	case dns.TypeTXT:
 		msg.Answer = append(msg.Answer, &dns.TXT{
@@ -86,6 +108,8 @@ func parsezone() {
 	f, ferr := os.Open("zone.db")
 	if ferr != nil {
 		panic(ferr)
+	} else {
+		defer f.Close()
 	}
 	zp := dns.NewZoneParser(f, ".", "zone.db")
 	ok := true
@@ -106,10 +130,10 @@ func parsezone() {
 	if er := zp.Err(); er != nil {
 		println(er.Error())
 	}
-	f.Close()
 }
 
 func reload_zone() {
+	defer func() { recover() }()
 	zone = map[string]map[uint16][]dns.RR{}
 	parsezone()
 }
