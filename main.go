@@ -14,11 +14,7 @@ var (
 	listen_addr = flag.String("addr", "127.0.0.2:8053", "ip:port")
 )
 
-var domainsToAddresses = map[string]string{
-	"google.com.":       "1.2.3.4",
-	"go.dns.ribes.ovh.": "4.3.2.1",
-}
-var zone = map[string]map[uint16]dns.RR{}
+var zone = map[string]map[uint16][]dns.RR{}
 
 func serve_dns(w dns.ResponseWriter, r *dns.Msg) {
 	msg := dns.Msg{}
@@ -29,7 +25,7 @@ func serve_dns(w dns.ResponseWriter, r *dns.Msg) {
 
 	if _, zok := zone[domain]; zok { // serve zone file
 		if rr_resp, rok := zone[domain][msg.Question[0].Qtype]; rok {
-			msg.Answer = []dns.RR{rr_resp}
+			msg.Answer = rr_resp
 			w.WriteMsg(&msg)
 			return
 		}
@@ -66,18 +62,11 @@ func serve_dns(w dns.ResponseWriter, r *dns.Msg) {
 
 	switch r.Question[0].Qtype {
 	case dns.TypeA:
-		address, ok := domainsToAddresses[domain]
-		if ok {
-			msg.Answer = append(msg.Answer, &dns.A{
-				Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
-				A:   net.ParseIP(address),
-			})
-		} else {
-			msg.Answer = append(msg.Answer, &dns.A{
-				Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
-				A:   w.RemoteAddr().(*net.UDPAddr).IP,
-			})
-		}
+		msg.Answer = append(msg.Answer, &dns.A{
+			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeA, Class: dns.ClassINET, Ttl: 60},
+			A:   w.RemoteAddr().(*net.UDPAddr).IP,
+		})
+
 	case dns.TypeTXT:
 		msg.Answer = append(msg.Answer, &dns.TXT{
 			Hdr: dns.RR_Header{Name: domain, Rrtype: dns.TypeTXT, Class: dns.ClassINET, Ttl: 60},
@@ -105,11 +94,11 @@ func parsezone() {
 		rr, ok = zp.Next()
 		if ok {
 			hdr := rr.Header()
-			if recs, ok := zone[hdr.Name]; ok {
-				recs[hdr.Rrtype] = hdr
+			if _, ok := zone[hdr.Name]; ok {
+				zone[hdr.Name][hdr.Rrtype] = append(zone[hdr.Name][hdr.Rrtype], rr)
 			} else {
-				zone[hdr.Name] = map[uint16]dns.RR{}
-				zone[hdr.Name][hdr.Rrtype] = rr
+				zone[hdr.Name] = map[uint16][]dns.RR{}
+				zone[hdr.Name][hdr.Rrtype] = []dns.RR{rr}
 			}
 			println(rr.String())
 		}
@@ -121,7 +110,7 @@ func parsezone() {
 }
 
 func reload_zone() {
-	zone = map[string]map[uint16]dns.RR{}
+	zone = map[string]map[uint16][]dns.RR{}
 	parsezone()
 }
 
