@@ -12,7 +12,7 @@ import (
 )
 
 var (
-	listen_addr = flag.String("addr", "127.0.0.2:8053", "ip:port")
+	listen_addr = flag.String("addr", "0.0.0.0:8053", "ip:port")
 	zone_file   = flag.String("zone", "zone.db", "zone file")
 )
 
@@ -108,11 +108,13 @@ func time_ip() net.IP {
 func parsezone() {
 	f, ferr := os.Open(*zone_file)
 	if ferr != nil {
-		println(ferr)
+		println("failed to open file", ferr)
+		return
 	} else {
 		defer f.Close()
 	}
 	zp := dns.NewZoneParser(f, ".", "zone.db")
+	//zp := dns.NewZoneParser(f, ".", *zone_file)
 	ok := true
 	var rr dns.RR
 	for ok {

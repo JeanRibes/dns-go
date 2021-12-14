@@ -43,3 +43,9 @@ mail          IN  A     192.0.2.3             ; IPv4 address for mail.example.co
 mail2         IN  A     192.0.2.4             ; IPv4 address for mail2.example.com
 mail3         IN  A     192.0.2.5             ; IPv4 address for mail3.example.com
 ```
+
+## local test
+Use *dig*
+```shell
+dig @127.0.0.1 -p 8053 foo.bar.1.2.4.4.nip.subdomain.domain.lan
+```
